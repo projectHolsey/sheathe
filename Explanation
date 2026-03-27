@@ -1,0 +1,21 @@
+ /**
+     * 3 Main sections
+     * 
+     * 1 - Record the enviroment (changes to files)
+     * 2 - Record the HTTP requests on a specific port / endpoint?
+     *       - Can this be just pointed to a specific process?
+     * 3 - Keep track of times that things changed / happened
+     *  
+     * Playback feature
+     * - Set the environment back to a specific point in time
+     * - Send off a specific command
+     * - OR just viewer which lists the things that changed and the commmands that were sent without the additional
+     *      - Maybe you have 'playback verbose/advanced' which will monitor more things or other locations too
+     * 
+     * Diff the before and after certain time periods
+     * - Will come from good records
+     */
+
+Honestly, we're just seeing how far we can get.
+
+If it's useful, even better.
