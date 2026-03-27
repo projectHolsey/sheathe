@@ -19,3 +19,26 @@
 Honestly, we're just seeing how far we can get.
 
 If it's useful, even better.
+
+
+The goal though, monitor the following stuff
+
+dependency updated
+env var changed
+config edited
+service not running
+different binary/version being used
+
+git commit + diff
+installed dependencies (language-specific)
+environment variables
+running processes / ports
+system info (OS, kernel, etc.)
+key config files (hashes)
+
+-- = Potential
+
+-- Let someone mark a current moment in time as 'good', so they can see what changed
+    from specific point in time vs specific event.
+    
+https://chatgpt.com/c/69c5c770-3f48-832c-aa80-4981057924fc
