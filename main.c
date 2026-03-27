@@ -44,6 +44,12 @@ int main() {
 
     // Defining the array to hold the structs
     fn_struct *file_watchers = malloc(10 * sizeof(fn_struct));
+    /* 
+    TODO: This can be changed to allocate 100 file watchers or something so we don't need to waste time later 
+    in the program allocating more memory to the heap.
+    Could also be done at start of day so it's on the stack before we even start.
+     */
+
     int numberOfWatchers = 1;
     int fileCounter = 0;
     // dir will already store the list of files in the current directory
