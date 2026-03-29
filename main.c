@@ -53,7 +53,7 @@ int main() {
     int numberOfWatchers = 1;
     int fileCounter = 0;
     // dir will already store the list of files in the current directory
-    while ((dir == readdir(d)) != NULL) {
+    while ((dir == readdir(d))) {
         printf("Monitoring file : %s\n", dir->d_name); 
         if (numberOfWatchers <= fileCounter) {
             fn_struct *temp = realloc(file_watchers, (numberOfWatchers + 1) * sizeof(fn_struct));

@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "gcc build and compile",
+			"command": "gcc main.c -o build/sheathe && sudo ./build/sheathe",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": [],
+			"detail": "GCC Make and compile the Sheathe program"
+		},
+	]
+}
