@@ -12,6 +12,8 @@ typedef struct {
 
 int main() {
 
+    
+
     /**
      * 3 Main sections
      * 
@@ -42,6 +44,8 @@ int main() {
         return EXIT_FAILURE; // Failed to open the diretory
     }
 
+
+
     // Defining the array to hold the structs
     fn_struct *file_watchers = malloc(10 * sizeof(fn_struct));
     /* 
@@ -63,8 +67,6 @@ int main() {
                 
             }
         }
-    
-        
 
     }
 
