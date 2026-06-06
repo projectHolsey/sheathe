@@ -10,6 +10,12 @@
 #include <sys/stat.h>
 
 
+/**
+ * 
+ * This is designed to monitor specific folders
+ * - Here it'll show any new files added / modified / changed and what is changed 
+ * 
+ */
 
 void print_exe_from_pid(pid_t pid)
 {
