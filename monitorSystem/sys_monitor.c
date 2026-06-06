@@ -1,10 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "sys_monitor.h"
 
 
-// This should rarely exceed this amount.. But we can calloc more if needed later on.
-char env_vars[100][100];
 
 /**
  * In here we're looking for things like..:
