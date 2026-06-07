@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>sysmon</title>
+<style>
+  /* ── Design direction: industrial terminal ──────────────────────────
+   * Monospace everywhere. Amber-on-black CRT palette. Hard edges, no
+   * rounded corners. Data density over whitespace. Scanline texture.
+   * Feels like something running inside a server room, not a startup.
+   * ──────────────────────────────────────────────────────────────── */
+
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --bg:         #0a0a08;
+    --bg2:        #111110;
+    --bg3:        #181815;
+    --amber:      #e8a020;
+    --amber-dim:  #7a5010;
+    --amber-glow: #ffcc60;
+    --green:      #30c060;
+    --green-dim:  #1a5030;
+    --red:        #d03030;
+    --red-dim:    #5a1010;
+    --blue:       #4090d0;
+    --border:     #333328;
+    --border-lit: #5a5040;
+    --text:       #c8b870;
+    --text-dim:   #6a5e38;
+    --text-bright:#f0d890;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    /* Subtle scanline texture — purely CSS, no image */
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.07) 2px,
+      rgba(0,0,0,0.07) 4px
+    );
+  }
+
+  /* ── Layout ─────────────────────────────────────────────────────── */
+
+  #shell {
+    display: grid;
+    grid-template-rows: 38px 1fr;
+    grid-template-columns: 220px 1fr;
+    height: 100vh;
+    gap: 0;
+  }
+
+  /* ── Topbar ──────────────────────────────────────────────────────── */
+
+  #topbar {
+    grid-column: 1 / -1;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border-lit);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 16px;
+  }
+
+  #topbar .logo {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 15px;
+    color: var(--amber-glow);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+
+  #topbar .sep { flex: 1; }
+
+  #clock {
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .status-pill {
+    font-size: 10px;
+    padding: 2px 8px;
+    border: 1px solid;
+    letter-spacing: 1px;
+  }
+  .status-pill.ok  { color: var(--green); border-color: var(--green-dim); }
+  .status-pill.err { color: var(--red);   border-color: var(--red-dim);   }
+
+  /* ── Sidebar (controls) ─────────────────────────────────────────── */
+
+  #sidebar {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+
+  .sidebar-section { margin-bottom: 4px; }
+
+  .sidebar-header {
+    padding: 6px 12px;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+
+  .sidebar-item {
+    padding: 5px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.1s;
+  }
+  .sidebar-item:hover  { background: var(--bg3); color: var(--text-bright); }
+  .sidebar-item.active { background: var(--bg3); color: var(--amber-glow); }
+  .sidebar-item .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--amber-dim);
+    flex-shrink: 0;
+  }
+  .sidebar-item.active .dot { background: var(--amber); box-shadow: 0 0 4px var(--amber); }
+
+  /* ── Add controls in sidebar ────────────────────────────────────── */
+
+  .add-form {
+    padding: 6px 10px;
+    display: flex;
+    gap: 4px;
+  }
+  .add-form input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 3px 6px;
+    outline: none;
+  }
+  .add-form input:focus { border-color: var(--amber-dim); }
+  .add-form input::placeholder { color: var(--text-dim); }
+
+  .btn {
+    background: transparent;
+    border: 1px solid var(--amber-dim);
+    color: var(--amber);
+    font-family: inherit;
+    font-size: 10px;
+    padding: 3px 8px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.1s;
+  }
+  .btn:hover { background: var(--amber-dim); color: var(--amber-glow); }
+  .btn.danger { border-color: var(--red-dim); color: var(--red); }
+  .btn.danger:hover { background: var(--red-dim); }
+
+  /* ── Main content area ──────────────────────────────────────────── */
+
+  #main {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Tabs */
+  #tabs {
+    display: flex;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    padding: 8px 20px;
+    cursor: pointer;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-right: 1px solid var(--border);
+    transition: all 0.1s;
+    position: relative;
+  }
+  .tab:hover  { color: var(--text); }
+  .tab.active {
+    color: var(--amber-glow);
+    background: var(--bg3);
+  }
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; left: 0; right: 0;
+    height: 2px;
+    background: var(--amber);
+  }
+  .tab-badge {
+    display: inline-block;
+    background: var(--amber-dim);
+    color: var(--amber-glow);
+    font-size: 9px;
+    padding: 0 4px;
+    margin-left: 4px;
+    min-width: 16px;
+    text-align: center;
+  }
+
+  /* Panel */
+  .panel {
+    display: none;
+    flex: 1;
+    overflow: hidden;
+    flex-direction: column;
+  }
+  .panel.visible { display: flex; }
+
+  /* ── Net panel ──────────────────────────────────────────────────── */
+
+  #net-panel .toolbar {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .table-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  thead th {
+    text-align: left;
+    padding: 6px 10px;
+    color: var(--text-dim);
+    font-weight: 400;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-size: 9px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--bg2);
+    z-index: 1;
+  }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    animation: rowIn 0.2s ease;
+  }
+  tbody tr:hover { background: var(--bg3); }
+  tbody td {
+    padding: 5px 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+  }
+
+  @keyframes rowIn {
+    from { opacity: 0; transform: translateX(-4px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .method-badge {
+    font-size: 9px;
+    padding: 1px 5px;
+    letter-spacing: 1px;
+    font-weight: 600;
+  }
+  .method-GET    { color: var(--green);  background: var(--green-dim);  }
+  .method-POST   { color: var(--amber);  background: var(--amber-dim);  }
+  .method-DELETE { color: var(--red);    background: var(--red-dim);    }
+  .method-PUT    { color: var(--blue);   background: #1a3050;           }
+  .method-other  { color: var(--text);   background: var(--bg3);        }
+
+  /* ── File panel ─────────────────────────────────────────────────── */
+
+  .event-stream {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+  }
+
+  .event-row {
+    display: flex;
+    gap: 10px;
+    padding: 3px 10px;
+    border-bottom: 1px solid var(--border);
+    animation: rowIn 0.15s ease;
+  }
+  .event-row:hover { background: var(--bg3); }
+
+  .ev-ts   { color: var(--text-dim); flex-shrink: 0; width: 80px; }
+  .ev-type { flex-shrink: 0; width: 80px; font-weight: 600; }
+  .ev-type.create     { color: var(--green); }
+  .ev-type.delete     { color: var(--red); }
+  .ev-type.modify     { color: var(--amber); }
+  .ev-type.close_write{ color: var(--amber); }
+  .ev-type.moved_from { color: var(--blue); }
+  .ev-type.moved_to   { color: var(--blue); }
+  .ev-type.attrib     { color: var(--text-dim); }
+  .ev-path { color: var(--text-dim); flex-shrink: 0; }
+  .ev-name { color: var(--text-bright); }
+
+  /* ── Service panel ──────────────────────────────────────────────── */
+
+  .service-block {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .service-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    background: var(--bg2);
+    cursor: pointer;
+    user-select: none;
+  }
+  .service-header:hover { background: var(--bg3); }
+
+  .svc-name   { color: var(--text-bright); font-weight: 500; flex: 1; }
+  .svc-status {
+    font-size: 9px;
+    padding: 2px 6px;
+    letter-spacing: 1px;
+    border: 1px solid;
+  }
+  .svc-status.active   { color: var(--green); border-color: var(--green-dim); }
+  .svc-status.inactive { color: var(--text-dim); border-color: var(--border); }
+  .svc-status.failed   { color: var(--red);   border-color: var(--red-dim); }
+  .svc-status.unknown  { color: var(--text-dim); border-color: var(--border); }
+
+  .service-body {
+    display: none;
+    flex-direction: column;
+  }
+  .service-body.open { display: flex; }
+
+  .log-tabs {
+    display: flex;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .log-tab {
+    padding: 4px 14px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    color: var(--text-dim);
+    border-right: 1px solid var(--border);
+  }
+  .log-tab:hover  { color: var(--text); }
+  .log-tab.active { color: var(--amber); background: var(--bg3); }
+
+  .log-view {
+    height: 200px;
+    overflow-y: auto;
+    padding: 6px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    line-height: 1.6;
+    color: var(--text);
+    background: var(--bg);
+  }
+
+  .log-line { white-space: pre-wrap; word-break: break-all; }
+  .log-line.err-line { color: var(--red); }
+  .log-line.warn-line { color: var(--amber); }
+
+  /* ── Scrollbar ──────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border-lit); }
+
+  /* ── Empty states ───────────────────────────────────────────────── */
+  .empty {
+    padding: 40px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  .empty::before { display: block; font-size: 28px; margin-bottom: 8px; }
+  #net-empty::before   { content: '⬡'; }
+  #file-empty::before  { content: '◈'; }
+  #svc-empty::before   { content: '◎'; }
+</style>
+</head>
+<body>
+
+<div id="shell">
+
+  <!-- ── Topbar ──────────────────────────────────────────────────────── -->
+  <div id="topbar">
+    <span class="logo">sysmon</span>
+    <span class="status-pill ok" id="conn-status">CONNECTED</span>
+    <span class="sep"></span>
+    <span id="clock"></span>
+  </div>
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────── -->
+  <div id="sidebar">
+
+    <!-- Net interface selector -->
+    <div class="sidebar-section">
+      <div class="sidebar-header">Network</div>
+      <div class="add-form">
+        <input id="net-iface" type="text" placeholder="interface (e.g. eth0)">
+        <button class="btn" onclick="setNetInterface()">SET</button>
+      </div>
+      <div class="sidebar-item active" id="net-nav" onclick="showTab('net')">
+        <span class="dot"></span>HTTP Traffic
+      </div>
+    </div>
+
+    <!-- File watch list -->
+    <div class="sidebar-section">
+      <div class="sidebar-header">File Watches</div>
+      <div class="add-form">
+        <input id="file-path" type="text" placeholder="/path/to/watch">
+        <button class="btn" onclick="addFileWatch()">ADD</button>
+      </div>
+      <div id="file-watch-list"></div>
+      <div class="sidebar-item" id="file-nav" onclick="showTab('files')">
+        <span class="dot"></span>File Events
+      </div>
+    </div>
+
+    <!-- Service watch list -->
+    <div class="sidebar-section">
+      <div class="sidebar-header">Services</div>
+      <div class="add-form">
+        <input id="svc-name" type="text" placeholder="service name">
+        <button class="btn" onclick="addService()">ADD</button>
+      </div>
+      <div id="svc-list"></div>
+      <div class="sidebar-item" id="svc-nav" onclick="showTab('services')">
+        <span class="dot"></span>Service Monitor
+      </div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- ── Main ────────────────────────────────────────────────────────── -->
+  <div id="main">
+
+    <div id="tabs">
+      <div class="tab active" id="tab-net"      onclick="showTab('net')">
+        Net <span class="tab-badge" id="net-count">0</span>
+      </div>
+      <div class="tab"        id="tab-files"    onclick="showTab('files')">
+        Files <span class="tab-badge" id="file-count">0</span>
+      </div>
+      <div class="tab"        id="tab-services" onclick="showTab('services')">
+        Services <span class="tab-badge" id="svc-count">0</span>
+      </div>
+    </div>
+
+    <!-- Net panel -->
+    <div class="panel visible" id="net-panel">
+      <div class="toolbar">
+        <span>Capturing HTTP on port 80 / 8080 / 3000 / 8000</span>
+        <span class="sep" style="flex:1"></span>
+        <span id="net-rate">0 req/s</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Method</th>
+              <th>Host</th>
+              <th>URI</th>
+              <th>Src</th>
+              <th>Dst</th>
+              <th>Bytes</th>
+            </tr>
+          </thead>
+          <tbody id="net-tbody"></tbody>
+        </table>
+        <div class="empty" id="net-empty">No HTTP traffic captured yet.<br>Make sure sysmon runs with cap_net_raw.</div>
+      </div>
+    </div>
+
+    <!-- Files panel -->
+    <div class="panel" id="files-panel">
+      <div class="event-stream" id="file-stream">
+        <div class="empty" id="file-empty">No file events yet.<br>Add a path in the sidebar to start watching.</div>
+      </div>
+    </div>
+
+    <!-- Services panel -->
+    <div class="panel" id="services-panel">
+      <div id="svc-blocks" style="overflow-y:auto;flex:1">
+        <div class="empty" id="svc-empty">No services monitored yet.<br>Enter a systemd service name in the sidebar.</div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /shell -->
+
+<script>
+/*
+ * frontend.js — Vanilla JS, no frameworks, no build step.
+ *
+ * HOW IT WORKS:
+ *   Every POLL_MS milliseconds we call each /api/* endpoint and
+ *   diff the data against what we last rendered.  We chose polling
+ *   over WebSockets because:
+ *     - Simpler C server (no upgrade handshake, no frame parsing)
+ *     - A 2-second poll is fast enough for a local dashboard
+ *   If you want true push, add WebSocket support to server.c and
+ *   replace setInterval with new WebSocket(...) here.
+ */
+
+const API    = '';          // same origin — no URL needed
+const POLL   = 2000;        // ms between polls
+
+/* ── State ───────────────────────────────────────────────────────── */
+let netEvents   = [];
+let fileWatches = [];       // paths we're watching (shown in sidebar)
+let fileEvents  = [];
+let services    = {};       // name → {status, logs[], io[], openTab}
+
+let lastNetCount  = 0;
+let netRateCount  = 0;
+let netRateTimer  = null;
+
+/* ── Clock ───────────────────────────────────────────────────────── */
+function updateClock() {
+  document.getElementById('clock').textContent =
+    new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ── Tab switching ───────────────────────────────────────────────── */
+function showTab(name) {
+  ['net','files','services'].forEach(t => {
+    document.getElementById(`tab-${t === 'net' ? 'net' : t === 'files' ? 'files' : 'services'}`).classList.toggle('active', t === name);
+    document.getElementById(`${t}-panel`).classList.toggle('visible', t === name);
+  });
+  // sidebar nav items
+  document.getElementById('net-nav').classList.toggle('active',      name === 'net');
+  document.getElementById('file-nav').classList.toggle('active',     name === 'files');
+  document.getElementById('svc-nav').classList.toggle('active',      name === 'services');
+}
+
+/* ── Generic fetch with error handling ──────────────────────────── */
+async function api(method, path, body) {
+  try {
+    const opts = { method };
+    if (body) {
+      opts.headers = {'Content-Type': 'application/json'};
+      opts.body    = JSON.stringify(body);
+    }
+    const r = await fetch(API + path, opts);
+    if (!r.ok) throw new Error(r.status);
+    setConnected(true);
+    return r.json();
+  } catch (e) {
+    setConnected(false);
+    return null;
+  }
+}
+
+function setConnected(ok) {
+  const el = document.getElementById('conn-status');
+  el.textContent = ok ? 'CONNECTED' : 'OFFLINE';
+  el.className = 'status-pill ' + (ok ? 'ok' : 'err');
+}
+
+/* ── Net monitor ─────────────────────────────────────────────────── */
+
+async function pollNet() {
+  const data = await api('GET', '/api/net');
+  if (!data) return;
+
+  const events = data.events || [];
+  document.getElementById('net-count').textContent = events.length;
+
+  // Rate: count new events since last poll
+  const newCount = events.length - lastNetCount;
+  if (newCount > 0) netRateCount += newCount;
+  lastNetCount = events.length;
+
+  const tbody = document.getElementById('net-tbody');
+  const empty = document.getElementById('net-empty');
+
+  if (events.length === 0) {
+    empty.style.display = '';
+    tbody.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  // Re-render table rows (show newest first)
+  const rows = [...events].reverse().map(e => {
+    const mclass = ['GET','POST','PUT','DELETE','PATCH','HEAD']
+      .includes(e.method) ? `method-${e.method}` : 'method-other';
+    const t = e.ts ? e.ts.slice(11, 19) : '';
+    return `<tr>
+      <td>${t}</td>
+      <td><span class="method-badge ${mclass}">${e.method||'?'}</span></td>
+      <td title="${e.host}">${e.host||''}</td>
+      <td title="${e.uri}">${e.uri||''}</td>
+      <td>${e.src||''}</td>
+      <td>${e.dst||''}</td>
+      <td>${e.len||0}</td>
+    </tr>`;
+  }).join('');
+
+  // Only update DOM if content changed (avoid flicker)
+  if (tbody.innerHTML !== rows) tbody.innerHTML = rows;
+}
+
+// Update req/s counter every second
+setInterval(() => {
+  document.getElementById('net-rate').textContent = netRateCount + ' req/s';
+  netRateCount = 0;
+}, 1000);
+
+/* ── Net interface control ───────────────────────────────────────── */
+async function setNetInterface() {
+  const iface = document.getElementById('net-iface').value.trim();
+  if (!iface) return;
+  await api('POST', '/api/net/config', { interface: iface });
+}
+
+/* ── File monitor ────────────────────────────────────────────────── */
+
+async function pollFiles() {
+  const data = await api('GET', '/api/files');
+  if (!data) return;
+
+  // Update sidebar watch list
+  fileWatches = data.watches || [];
+  renderFileWatchList();
+
+  const events = data.events || [];
+  document.getElementById('file-count').textContent = events.length;
+
+  const stream = document.getElementById('file-stream');
+  const empty  = document.getElementById('file-empty');
+
+  if (events.length === 0) {
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  // Render newest-first
+  const rows = [...events].reverse().map(e => {
+    const tc = e.type ? e.type.replace('_','') : 'unknown';
+    return `<div class="event-row">
+      <span class="ev-ts">${(e.ts||'').slice(11,19)}</span>
+      <span class="ev-type ${tc}">${e.type||'?'}</span>
+      <span class="ev-path">${e.path||''}/</span>
+      <span class="ev-name">${e.name||''}</span>
+    </div>`;
+  }).join('');
+
+  const html = rows;
+  if (stream.innerHTML !== html) stream.innerHTML = html;
+}
+
+function renderFileWatchList() {
+  const el = document.getElementById('file-watch-list');
+  el.innerHTML = fileWatches.map(p => `
+    <div class="sidebar-item" style="font-size:10px;">
+      <span class="dot" style="background:var(--green);box-shadow:0 0 4px var(--green)"></span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis" title="${p}">${p}</span>
+      <button class="btn danger" style="padding:1px 5px;font-size:9px"
+              onclick="removeFileWatch('${p}')">×</button>
+    </div>`).join('');
+}
+
+async function addFileWatch() {
+  const path = document.getElementById('file-path').value.trim();
+  if (!path) return;
+  await api('POST', '/api/files/watch', { path });
+  document.getElementById('file-path').value = '';
+}
+
+async function removeFileWatch(path) {
+  await api('POST', '/api/files/unwatch', { path });
+}
+
+/* ── Service monitor ─────────────────────────────────────────────── */
+
+async function pollServices() {
+  const data = await api('GET', '/api/services');
+  if (!data) return;
+
+  const svcs = data.services || [];
+  document.getElementById('svc-count').textContent = svcs.length;
+
+  // Update sidebar list
+  const svcList = document.getElementById('svc-list');
+  svcList.innerHTML = svcs.map(s => `
+    <div class="sidebar-item" style="font-size:10px;">
+      <span class="dot" style="background:${
+        s.status === 'active' ? 'var(--green)' :
+        s.status === 'failed' ? 'var(--red)' : 'var(--text-dim)'}"></span>
+      <span style="flex:1">${s.name}</span>
+      <button class="btn danger" style="padding:1px 5px;font-size:9px"
+              onclick="removeService('${s.name}')">×</button>
+    </div>`).join('');
+
+  const empty = document.getElementById('svc-empty');
+  const blocks = document.getElementById('svc-blocks');
+
+  if (svcs.length === 0) { empty.style.display = ''; return; }
+  empty.style.display = 'none';
+
+  // For each service, create or update its block
+  // Track which services we rendered so we can remove stale ones
+  const rendered = new Set();
+
+  svcs.forEach(s => {
+    rendered.add(s.name);
+
+    // Preserve which log sub-tab is open
+    if (!services[s.name]) services[s.name] = { activeTab: 'logs' };
+    const local = services[s.name];
+
+    let block = document.getElementById(`svc-${s.name}`);
+    if (!block) {
+      block = document.createElement('div');
+      block.className = 'service-block';
+      block.id = `svc-${s.name}`;
+      blocks.appendChild(block);
+    }
+
+    const logsHtml = (s.logs || []).map(line => {
+      const cls = /error|fail|crit/i.test(line) ? 'err-line'
+                : /warn/i.test(line)             ? 'warn-line' : '';
+      return `<div class="log-line ${cls}">${escHtml(line)}</div>`;
+    }).join('');
+
+    const ioHtml = (s.io || []).map(line =>
+      `<div class="log-line">${escHtml(line)}</div>`
+    ).join('');
+
+    const statusCls = ['active','inactive','failed'].includes(s.status)
+                      ? s.status : 'unknown';
+
+    block.innerHTML = `
+      <div class="service-header" onclick="toggleService('${s.name}')">
+        <span class="svc-name">● ${s.name}</span>
+        <span class="svc-status ${statusCls}">${s.status.toUpperCase()}</span>
+        <button class="btn danger" style="margin-left:8px;padding:2px 6px;font-size:9px"
+                onclick="event.stopPropagation();removeService('${s.name}')">UNWATCH</button>
+      </div>
+      <div class="service-body ${local.open ? 'open' : ''}" id="svc-body-${s.name}">
+        <div class="log-tabs">
+          <div class="log-tab ${local.activeTab==='logs'?'active':''}"
+               onclick="switchLogTab('${s.name}','logs')">JOURNAL</div>
+          <div class="log-tab ${local.activeTab==='io'?'active':''}"
+               onclick="switchLogTab('${s.name}','io')">I/O TRACE</div>
+        </div>
+        <div class="log-view" id="svc-logs-${s.name}"
+             style="${local.activeTab==='logs'?'':'display:none'}">${logsHtml||'<span style="color:var(--text-dim)">No log lines yet.</span>'}</div>
+        <div class="log-view" id="svc-io-${s.name}"
+             style="${local.activeTab==='io'?'':'display:none'}">${ioHtml||'<span style="color:var(--text-dim)">No I/O trace data yet.<br>Requires CAP_SYS_PTRACE or root.</span>'}</div>
+      </div>`;
+
+    // Auto-scroll log to bottom
+    const logEl = document.getElementById(`svc-logs-${s.name}`);
+    const ioEl  = document.getElementById(`svc-io-${s.name}`);
+    if (logEl) logEl.scrollTop = logEl.scrollHeight;
+    if (ioEl)  ioEl.scrollTop  = ioEl.scrollHeight;
+  });
+
+  // Remove blocks for services no longer watched
+  Array.from(blocks.querySelectorAll('.service-block')).forEach(el => {
+    const name = el.id.replace('svc-', '');
+    if (!rendered.has(name)) el.remove();
+  });
+}
+
+function toggleService(name) {
+  if (!services[name]) services[name] = { activeTab: 'logs' };
+  services[name].open = !services[name].open;
+  const body = document.getElementById(`svc-body-${name}`);
+  if (body) body.classList.toggle('open', services[name].open);
+}
+
+function switchLogTab(name, tab) {
+  if (!services[name]) services[name] = {};
+  services[name].activeTab = tab;
+  const logsEl = document.getElementById(`svc-logs-${name}`);
+  const ioEl   = document.getElementById(`svc-io-${name}`);
+  if (logsEl) logsEl.style.display = tab === 'logs' ? '' : 'none';
+  if (ioEl)   ioEl.style.display   = tab === 'io'   ? '' : 'none';
+  // Re-render to update tab highlight
+  pollServices();
+}
+
+async function addService() {
+  const name = document.getElementById('svc-name').value.trim();
+  if (!name) return;
+  await api('POST', '/api/services/watch', { name });
+  document.getElementById('svc-name').value = '';
+}
+
+async function removeService(name) {
+  delete services[name];
+  await api('POST', '/api/services/unwatch', { name });
+}
+
+/* ── Utilities ───────────────────────────────────────────────────── */
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ── Poll loop ───────────────────────────────────────────────────── */
+/*
+ * We poll all three endpoints on the same interval.
+ * They are independent async calls — one slow response won't block another.
+ */
+function poll() {
+  pollNet();
+  pollFiles();
+  pollServices();
+}
+
+poll();
+setInterval(poll, POLL);
+</script>
+</body>
+</html>
