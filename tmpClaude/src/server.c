@@ -69,8 +69,7 @@ static int serve_static(int fd, const char *path)
     /* Map URL path → filesystem path */
     char fspath[512];
     /* Serve from the directory next to the binary */
-    snprintf(fspath, sizeof(fspath), "web/static%s",
-             strcmp(path, "/") == 0 ? "/index.html" : path);
+    snprintf(fspath, sizeof(fspath), "web/static%s", strcmp(path, "/") == 0 ? "/index.html" : path);
 
     FILE *f = fopen(fspath, "rb");
     if (!f) return -1;

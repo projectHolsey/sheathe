@@ -12,7 +12,7 @@ run-hw: hw
 
 # build only
 web:
-	gcc monitorWeb/main.c monitorWeb/net_monitor.c -o monitorWeb/web
+	gcc monitorWeb/webmain.c monitorWeb/net_monitor.c -o monitorWeb/web
 # build and run
 run-web: web
 	./monitorWeb/web
@@ -24,3 +24,10 @@ sys:
 # build and run
 run-sys: sys
 	./monitorSystem/sys
+
+# build only
+pm:
+	gcc projectMonitor/monitorMain.c projectMonitor/monitor.c -o projectMonitor/pm
+# build and run
+run-pm: sys
+	./projectMonitor/pm
