@@ -29,5 +29,5 @@ run-sys: sys
 pm:
 	gcc projectMonitor/monitorMain.c projectMonitor/monitor.c -o projectMonitor/pm
 # build and run
-run-pm: sys
+run-pm: pm
 	./projectMonitor/pm

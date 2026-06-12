@@ -9,6 +9,8 @@
 #include <sys/fanotify.h>
 #include <sys/stat.h>
 
+void print_exe_from_pid(pid_t pid);
+
 
 /**
  * 
@@ -34,7 +36,7 @@ void print_exe_from_pid(pid_t pid)
 
 }
 
-static void print_path_from_fd(int fd)
+void print_path_from_fd(int fd)
 {
     char path[PATH_MAX];
     char proc_path[64];
@@ -50,7 +52,7 @@ static void print_path_from_fd(int fd)
     }
 }
 
-int watch_new_file(char* filename) {
+extern int watch_new_file(char* filename) {
 
     /* Initialize fanotify in notification mode (no permission events) */
     int fan_fd = fanotify_init(FAN_CLASS_NOTIF | FAN_CLOEXEC,
